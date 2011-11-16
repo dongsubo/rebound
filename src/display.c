@@ -49,9 +49,6 @@
 #include "display.h"
 #include "output.h"
 
-#ifdef _APPLE
-GLuint display_dlist_sphere;	/**< Precalculated display list of a sphere. */
-#endif // APPLE
 int display_mode = 0;		/**< Switches between point sprite, spheres, and textured spheres. */
 int display_init_fancy_done = 0;	
 int display_pause_sim = 0;	/**< Pauses simulation. */
@@ -66,6 +63,13 @@ int display_fancy = 0;		/**< Show fancy graphics with textures. */
 
 void display_init_fancy();
 int display_texture_star1;
+int VertexCount, IndicesCount;
+int VertexHandle, IndicesHandle;
+typedef struct _vbo {
+	GLfloat pos[3];
+	GLfloat tex[2];
+} vbo;
+
 
 /**
  * This function is called when the user presses a key. 
@@ -142,11 +146,7 @@ void display_cell(struct cell* node){
 	glTranslatef(node->mx,node->my,node->mz);
 	glScalef(0.04*node->w,0.04*node->w,0.04*node->w);
 	if (display_mass) {
-#ifdef _APPLE
-		glCallList(display_dlist_sphere);
-#else
 		glutSolidSphere(1,40,10);
-#endif
 	}
 	glScalef(25./node->w,25./node->w,25./node->w);
 	glTranslatef(-node->mx,-node->my,-node->mz);
@@ -206,6 +206,8 @@ void display(){
 			glLightfv(GL_LIGHT0, GL_POSITION, lightpos);
 			break;
 		case 2: // textured spheres
+			glDisable(GL_LIGHTING);
+			glDisable(GL_LIGHT0);
 			glDisable(GL_BLEND);                    
 			glDepthMask(GL_TRUE);
 			glEnable(GL_DEPTH_TEST);
@@ -244,18 +246,26 @@ void display(){
 						double scale = p.r;
 #endif 	// COLLISIONS_NONE
 						glScalef(scale,scale,scale);
-#ifdef _APPLE
-						glCallList(display_dlist_sphere);
-#else 	//_APPLE
 						glutSolidSphere(1,40,10);
-#endif 	//_APPLE
 						glScalef(1./scale,1./scale,1./scale);
 						glTranslatef(-p.x,-p.y,-p.z);
 					}
 					break;
 				case 2: // textured spheres
 					glColor4f(1.0,1.0,1.0,1.0);
+					glTexParameterf( GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT );
+					glTexParameterf( GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT );
+					glBindBuffer(GL_ARRAY_BUFFER,VertexHandle);
+					glEnableClientState(GL_VERTEX_ARRAY);
+					glVertexPointer(3,GL_FLOAT,		sizeof(vbo), (void*)(0));
+					glEnableClientState(GL_NORMAL_ARRAY);
+					glNormalPointer(GL_FLOAT,		sizeof(vbo), (void*)(0));
 					glBindTexture(GL_TEXTURE_2D,display_texture_star1);
+					glEnableClientState(GL_TEXTURE_COORD_ARRAY);	
+					glTexCoordPointer(2, GL_FLOAT,	sizeof(vbo), (void*)(3));
+
+					glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, IndicesHandle);
+
 					for (int i=0;i<N;i++){
 						struct particle p = particles[i];
 						glTranslatef(p.x,p.y,p.z);
@@ -265,14 +275,16 @@ void display(){
 						double scale = p.r;
 #endif 	// COLLISIONS_NONE
 						glScalef(scale,scale,scale);
-#ifdef _APPLE
-						glCallList(display_dlist_sphere);
-#else 	//_APPLE
-						glutSolidSphere(1,40,10);
-#endif 	//_APPLE
+						glDrawElements(GL_TRIANGLE_STRIP, IndicesCount, GL_UNSIGNED_SHORT, 0);
 						glScalef(1./scale,1./scale,1./scale);
 						glTranslatef(-p.x,-p.y,-p.z);
 					}
+					glDisableClientState(GL_VERTEX_ARRAY);
+					glDisableClientState(GL_NORMAL_ARRAY);
+					glDisableClientState(GL_TEXTURE_COORD_ARRAY);	
+					glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0); 	
+					glBindBuffer(GL_ARRAY_BUFFER,0);
+					glBindTexture(GL_TEXTURE_2D,0);
 					break;
 			}
 		}
@@ -333,6 +345,7 @@ void display(){
 	glTranslatef(0,0,boxsize_max);
 }
 
+
 void display_init(int argc, char* argv[]){
 	glutInit(&argc, argv);
 	glutInitDisplayMode(GLUT_DOUBLE | GLUT_RGB | GLUT_DEPTH );
@@ -345,17 +358,6 @@ void display_init(int argc, char* argv[]){
 	glEnable(GL_BLEND);                    
 	glBlendFunc(GL_SRC_ALPHA, GL_ONE);  
 	
-	// Sphere
-#ifdef _APPLE
-	display_dlist_sphere = glGenLists(1);
-	GLUquadricObj *sphere;
-	glNewList(display_dlist_sphere, GL_COMPILE);
-	sphere = gluNewQuadric();
-	gluSphere(sphere, 1.f, 20, 20);
-	gluDeleteQuadric(sphere);
-	glEndList();
-#endif // _APPLE
-  	
 	// Setup lights
 
 	glCullFace(GL_BACK);
@@ -375,6 +377,57 @@ void display_init(int argc, char* argv[]){
 	glMaterialfv(GL_FRONT, GL_AMBIENT_AND_DIFFUSE, sphere_mat);
 	glMaterialfv(GL_FRONT, GL_SPECULAR, sphere_spec);
 	glMaterialf(GL_FRONT, GL_SHININESS, 80);
+
+
+	// Init sphere
+	int stacks = 32;
+	int slices = 64;
+	float drho	= M_PI / (GLfloat) stacks;
+	float dtheta	= 2.0f * M_PI / (GLfloat) slices;
+	
+	VertexCount  =	(slices + 1)	* (stacks + 1);
+	IndicesCount = 2*(slices + 1)	* stacks; 
+	
+	vbo* sphereVBO					= calloc(VertexCount,	sizeof(vbo));	
+	GLushort * triangleStripIndices = calloc(IndicesCount,	sizeof(GLushort));
+	
+	int counter = 0;		
+	for (int i = 0; i <= stacks; i++) {
+		float rho = i * drho;
+		for (int j = 0; j <= slices; j++) {
+			float theta = j * dtheta;
+			
+			sphereVBO[counter].pos[0] = -sinf(theta) * sinf(rho);
+			sphereVBO[counter].pos[1] = cosf(theta) * sinf(rho);
+			sphereVBO[counter].pos[2] = cosf(rho);
+			sphereVBO[counter].tex[0] = 1.f-theta/(2.f*M_PI);
+			sphereVBO[counter].tex[1] = 1.f-rho/M_PI;
+			
+			if (i<stacks){
+				triangleStripIndices[2*counter]   = (GLushort) counter;
+				triangleStripIndices[2*counter+1] = (GLushort)(counter+(slices+1));
+			}
+			counter++;													 
+		}
+	}
+	
+	glGenBuffers(1,&VertexHandle);
+	glBindBuffer(GL_ARRAY_BUFFER, VertexHandle);
+	glBufferData(GL_ARRAY_BUFFER, VertexCount *sizeof(vbo), sphereVBO, GL_STATIC_DRAW);
+	glBindBuffer(GL_ARRAY_BUFFER,0);
+	
+	glGenBuffers(1,&IndicesHandle);
+	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, IndicesHandle);
+	glBufferData(GL_ELEMENT_ARRAY_BUFFER, IndicesCount * sizeof(GLushort), triangleStripIndices, GL_STATIC_DRAW);
+	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER,0);
+	
+	free(sphereVBO);
+	free(triangleStripIndices);
+
+
+
+
+
 
 	// Enter glut run loop and never come back.
 	display_init_fancy();
