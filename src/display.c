@@ -1,7 +1,7 @@
 /**
  * @file 	display.c
  * @brief 	Realtime OpenGL visualization.
- * @author 	Hanno Rein <hanno@hanno-rein.de>
+ * @author 	Hanno Rein <hanno@hanno-rein.de>, Dave Spiegel <dave@ias.edu>
  * @details 	These functions provide real time visualizations
  * using OpenGL. Screenshots can be saved with the output_png() routine.
  * Tested under Mac OSX Snow Leopard and Linux. 
@@ -32,6 +32,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <math.h>
+#include <string.h>
 #include <unistd.h>
 #include <sys/stat.h>
 #ifdef _APPLE
@@ -51,12 +52,8 @@
 #ifdef _APPLE
 GLuint display_dlist_sphere;	/**< Precalculated display list of a sphere. */
 #endif // APPLE
-#ifndef COLLISIONS_NONE
-int display_spheres = 1;	/**< Switches between point sprite and real spheres. */
-#else // COLLISIONS_NONE
-int display_spheres = 0;	/**< Switches between point sprite and real spheres. */
-#endif // COLLISIONS_NONE
-int display_init_done = 0;	
+int display_mode = 0;		/**< Switches between point sprite, spheres, and textured spheres. */
+int display_init_fancy_done = 0;	
 int display_pause_sim = 0;	/**< Pauses simulation. */
 int display_pause = 0;		/**< Pauses visualization, but keep simulation running */
 int display_tree = 0;		/**< Shows/hides tree structure. */
@@ -64,7 +61,11 @@ int display_mass = 0;		/**< Shows/hides centre of mass in tree structure. */
 int display_wire = 0;		/**< Shows/hides orbit wires. */
 int display_clear = 1;		/**< Toggles clearing the display on each draw. */
 int display_ghostboxes = 0;	/**< Shows/hides ghost boxes. */
+int display_fancy = 0;		/**< Show fancy graphics with textures. */
 #define DEG2RAD (M_PI/180.)
+
+void display_init_fancy();
+int display_texture_star1;
 
 /**
  * This function is called when the user presses a key. 
@@ -89,7 +90,8 @@ void displayKey(unsigned char key, int x, int y){
 			}
 			break;
 		case 's': case 'S':
-			display_spheres = !display_spheres;
+			display_mode++;
+			if (display_mode>2) display_mode=0;
 			break;
 		case 'g': case 'G':
 			display_ghostboxes = !display_ghostboxes;
@@ -109,6 +111,9 @@ void displayKey(unsigned char key, int x, int y){
 			break;
 		case 'w': case 'W':
 			display_wire = !display_wire;
+			break;
+		case 'f': case 'F':
+			display_fancy = !display_fancy;
 			break;
 		case 'c': case 'C':
 			display_clear = !display_clear;
@@ -178,22 +183,34 @@ void display(){
 	if (display_clear){
 	        glClear(GL_DEPTH_BUFFER_BIT | GL_COLOR_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
 	}
-	if (!display_wire) {
-	if (display_spheres){
-		glDisable(GL_BLEND);                    
-		glDepthMask(GL_TRUE);
-		glEnable(GL_DEPTH_TEST);
-		glEnable(GL_LIGHTING);
-		glEnable(GL_LIGHT0);
-		GLfloat lightpos[] = {0, boxsize_max, boxsize_max, 0.f};
-		glLightfv(GL_LIGHT0, GL_POSITION, lightpos);
-	}else{
-		glEnable(GL_BLEND);                    
-		glDepthMask(GL_FALSE);
-		glDisable(GL_DEPTH_TEST);
-		glDisable(GL_LIGHTING);
-		glDisable(GL_LIGHT0);
+	if (display_fancy && display_init_fancy_done == 0){
+		display_init_fancy();
 	}
+	switch (display_mode){
+		case 0: // points
+			glEnable(GL_BLEND);                    
+			glDepthMask(GL_FALSE);
+			glDisable(GL_DEPTH_TEST);
+			glDisable(GL_LIGHTING);
+			glDisable(GL_LIGHT0);
+			glDisable(GL_TEXTURE_2D);
+			break;
+		case 1: // spheres
+			glDisable(GL_BLEND);                    
+			glDepthMask(GL_TRUE);
+			glEnable(GL_DEPTH_TEST);
+			glEnable(GL_LIGHTING);
+			glEnable(GL_LIGHT0);
+			glDisable(GL_TEXTURE_2D);
+			GLfloat lightpos[] = {0, boxsize_max, boxsize_max, 0.f};
+			glLightfv(GL_LIGHT0, GL_POSITION, lightpos);
+			break;
+		case 2: // textured spheres
+			glDisable(GL_BLEND);                    
+			glDepthMask(GL_TRUE);
+			glEnable(GL_DEPTH_TEST);
+			glEnable(GL_TEXTURE_2D);
+			break;
 	}
 	glTranslatef(0,0,-boxsize_max);
 	glEnable(GL_POINT_SMOOTH);
@@ -205,33 +222,58 @@ void display(){
 		struct ghostbox gb = boundaries_get_ghostbox(i,j,k);
 		glTranslatef(gb.shiftx,gb.shifty,gb.shiftz);
 		if (!(!display_clear&&display_wire)){
-			if (display_spheres){
-				// Drawing Spheres
-				glColor4f(1.0,1.0,1.0,1.0);
-#ifndef COLLISIONS_NONE
-				for (int i=0;i<N;i++){
-					struct particle p = particles[i];
-					glTranslatef(p.x,p.y,p.z);
-					glScalef(p.r,p.r,p.r);
+			switch (display_mode){
+				case 0: // points
+					glEnableClientState(GL_VERTEX_ARRAY);
+					glPointSize(3.);
+					glColor4f(1.0,1.0,1.0,0.5);
+					glDrawArrays(GL_POINTS, _N_active, N-_N_active);
+					glColor4f(1.0,1.0,0.0,0.9);
+					glPointSize(5.);
+					glDrawArrays(GL_POINTS, 0, _N_active);
+					glDisableClientState(GL_VERTEX_ARRAY);
+					break;
+				case 1: // spheres
+					glColor4f(1.0,1.0,1.0,1.0);
+					for (int i=0;i<N;i++){
+						struct particle p = particles[i];
+						glTranslatef(p.x,p.y,p.z);
+#ifdef COLLISIONS_NONE
+						double scale = boxsize/100.;
+#else 	// COLLISIONS_NONE
+						double scale = p.r;
+#endif 	// COLLISIONS_NONE
+						glScalef(scale,scale,scale);
 #ifdef _APPLE
-					glCallList(display_dlist_sphere);
-#else //_APPLE
-					glutSolidSphere(1,40,10);
-#endif //_APPLE
-					glScalef(1./p.r,1./p.r,1./p.r);
-					glTranslatef(-p.x,-p.y,-p.z);
-				}
-#endif // COLLISIONS_NONE
-			}else{
-				// Drawing Points
-				glEnableClientState(GL_VERTEX_ARRAY);
-				glPointSize(3.);
-				glColor4f(1.0,1.0,1.0,0.5);
-				glDrawArrays(GL_POINTS, _N_active, N-_N_active);
-				glColor4f(1.0,1.0,0.0,0.9);
-				glPointSize(5.);
-				glDrawArrays(GL_POINTS, 0, _N_active);
-				glDisableClientState(GL_VERTEX_ARRAY);
+						glCallList(display_dlist_sphere);
+#else 	//_APPLE
+						glutSolidSphere(1,40,10);
+#endif 	//_APPLE
+						glScalef(1./scale,1./scale,1./scale);
+						glTranslatef(-p.x,-p.y,-p.z);
+					}
+					break;
+				case 2: // textured spheres
+					glColor4f(1.0,1.0,1.0,1.0);
+					glBindTexture(GL_TEXTURE_2D,display_texture_star1);
+					for (int i=0;i<N;i++){
+						struct particle p = particles[i];
+						glTranslatef(p.x,p.y,p.z);
+#ifdef COLLISIONS_NONE
+						double scale = boxsize/100.;
+#else 	// COLLISIONS_NONE
+						double scale = p.r;
+#endif 	// COLLISIONS_NONE
+						glScalef(scale,scale,scale);
+#ifdef _APPLE
+						glCallList(display_dlist_sphere);
+#else 	//_APPLE
+						glutSolidSphere(1,40,10);
+#endif 	//_APPLE
+						glScalef(1./scale,1./scale,1./scale);
+						glTranslatef(-p.x,-p.y,-p.z);
+					}
+					break;
 			}
 		}
 		// Drawing wires
@@ -335,8 +377,106 @@ void display_init(int argc, char* argv[]){
 	glMaterialf(GL_FRONT, GL_SHININESS, 80);
 
 	// Enter glut run loop and never come back.
-	display_init_done =1; 
+	display_init_fancy();
 	glutMainLoop();
+}
+
+char* display_texture_path = NULL;
+ 
+GLuint display_load_texture(char* filename, int width, int height){
+	GLuint texture;
+
+	// open texture data
+	char tmp[4096];
+	sprintf(tmp,"%s%s",display_texture_path,filename);
+	FILE* file = fopen( tmp, "rb" );
+	if ( file == NULL ) return 0;
+
+	// allocate buffer
+	width = 256;
+	height = 256;
+	char* data = malloc( width * height * 3 );
+
+	// read texture data
+	fread( data, width * height * 3, 1, file );
+	fclose( file );
+
+	// allocate a texture name
+	glGenTextures( 1, &texture );
+
+	// select our current texture
+	glBindTexture( GL_TEXTURE_2D, texture );
+
+	// select modulate to mix texture with color for shading
+	glTexEnvf( GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_MODULATE );
+	glTexParameterf( GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_NEAREST );
+	glTexParameterf( GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR );
+	glTexParameterf( GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT );
+	glTexParameterf( GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT );
+
+	// build our texture mipmaps
+	gluBuild2DMipmaps( GL_TEXTURE_2D, 3, width, height, GL_RGB, GL_UNSIGNED_BYTE, data );
+
+	// free buffer
+	free( data );
+
+	return texture;
+}
+
+void display_find_texture_path(){
+#define DTESTFILE "test.raw"
+	if(display_texture_path==NULL){
+		display_texture_path = calloc(sizeof(char),4096);
+	}
+	char tmp[40096];
+	if( access( DTESTFILE, R_OK ) != -1 ) {
+		sprintf(display_texture_path, "./"); 
+		return;
+	}
+	sprintf(tmp,"../%s",DTESTFILE);
+	if( access( tmp, R_OK ) != -1 ) {
+		sprintf(display_texture_path, "../"); 
+		return;
+	}
+	sprintf(tmp,"../resources/%s",DTESTFILE);
+	if( access( tmp, R_OK ) != -1 ) {
+		sprintf(display_texture_path, "../resources/"); 
+		return;
+	}
+	sprintf(tmp,"../../%s",DTESTFILE);
+	if( access( tmp, R_OK ) != -1 ) {
+		sprintf(display_texture_path, "../../"); 
+		return;
+	}
+	sprintf(tmp,"../../resources/%s",DTESTFILE);
+	if( access( tmp, R_OK ) != -1 ) {
+		sprintf(display_texture_path, "../../resources/"); 
+		return;
+	}
+	char* rebound = getenv("REBOUND");
+	if (rebound){
+		sprintf(tmp,"%s/%s",rebound,DTESTFILE);
+		if( access( tmp, R_OK ) != -1 ) {
+			sprintf(display_texture_path, "%s/",rebound); 
+			return;
+		}
+		sprintf(tmp,"%s/resources/%s",rebound,DTESTFILE);
+		if( access( tmp, R_OK ) != -1 ) {
+			sprintf(display_texture_path, "%s/resources/",rebound); 
+			return;
+		}
+	}
+	return; 
+}
+
+
+void display_init_fancy(){
+	display_find_texture_path();
+	if (!strlen(display_texture_path)){
+		printf("\nCannot find path for textures. Set the environment variable REBOUND.\n");
+		return;
+	}
+	display_texture_star1 = display_load_texture("star1.raw",256,256);
 }
 
 #endif // OPENGL
