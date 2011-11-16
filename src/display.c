@@ -262,7 +262,7 @@ void display(){
 					glNormalPointer(GL_FLOAT,		sizeof(vbo), (void*)(0));
 					glBindTexture(GL_TEXTURE_2D,display_texture_star1);
 					glEnableClientState(GL_TEXTURE_COORD_ARRAY);	
-					glTexCoordPointer(2, GL_FLOAT,	sizeof(vbo), (void*)(3));
+					glTexCoordPointer(2, GL_FLOAT,	sizeof(vbo), (void*)(3*sizeof(float)));
 
 					glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, IndicesHandle);
 
