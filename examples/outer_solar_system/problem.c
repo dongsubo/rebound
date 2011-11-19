@@ -102,7 +102,7 @@ void problem_init(int argc, char* argv[]){
 #ifdef OPENGL
 	// Setup textures
 	display_texture_name = malloc(sizeof(char*)*N);
-	display_texture_name[0] = "earth.raw";
+	display_texture_name[0] = "sun.raw";
 	display_texture_name[1] = "jupiter.raw";
 	display_texture_name[2] = "saturn.raw";
 	display_texture_name[3] = "uranus.raw";
