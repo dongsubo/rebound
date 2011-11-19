@@ -35,6 +35,7 @@
 #include "output.h"
 #include "particle.h"
 #include "boundaries.h"
+#include "display.h"
 
 double ss_pos[6][3] = 
 {
@@ -97,6 +98,17 @@ void problem_init(int argc, char* argv[]){
 #endif // INTEGRATOR_WH
 
 	system("rm -f orbits.txt");
+
+#ifdef OPENGL
+	// Setup textures
+	display_texture_name = malloc(sizeof(char*)*N);
+	display_texture_name[0] = "earth.raw";
+	display_texture_name[1] = "jupiter.raw";
+	display_texture_name[2] = "saturn.raw";
+	display_texture_name[3] = "uranus.raw";
+	display_texture_name[4] = "neptune.raw";
+	display_texture_name[5] = "pluto.raw";
+#endif	// OPENGL
 }
 
 void problem_inloop(){

@@ -49,22 +49,23 @@
 #include "display.h"
 #include "output.h"
 
-int display_mode = 0;		/**< Switches between point sprite, spheres, and textured spheres. */
-int display_init_fancy_done = 0;	
-int display_pause_sim = 0;	/**< Pauses simulation. */
-int display_pause = 0;		/**< Pauses visualization, but keep simulation running */
-int display_tree = 0;		/**< Shows/hides tree structure. */
-int display_mass = 0;		/**< Shows/hides centre of mass in tree structure. */
-int display_wire = 0;		/**< Shows/hides orbit wires. */
-int display_clear = 1;		/**< Toggles clearing the display on each draw. */
-int display_ghostboxes = 0;	/**< Shows/hides ghost boxes. */
-int display_fancy = 0;		/**< Show fancy graphics with textures. */
+int display_mode 		= 0;	/**< Switches between point sprite, spheres, and textured spheres. */
+int display_init_fancy_done 	= 0;	
+int display_pause_sim 		= 0;	/**< Pauses simulation. */
+int display_pause 		= 0;	/**< Pauses visualization, but keep simulation running */
+int display_tree 		= 0;	/**< Shows/hides tree structure. */
+int display_mass 		= 0;	/**< Shows/hides centre of mass in tree structure. */
+int display_wire 		= 0;	/**< Shows/hides orbit wires. */
+int display_clear 		= 1;	/**< Toggles clearing the display on each draw. */
+int display_ghostboxes 		= 0;	/**< Shows/hides ghost boxes. */
 #define DEG2RAD (M_PI/180.)
 
+double display_sphere_scale 	= 1.;	
 void display_init_fancy();
-int display_texture_star1;
-int VertexCount, IndicesCount;
-int VertexHandle, IndicesHandle;
+unsigned int* display_texture_id = NULL;
+char** display_texture_name	= NULL;
+unsigned int VertexCount, IndicesCount;
+unsigned int VertexHandle, IndicesHandle;
 typedef struct _vbo {
 	GLfloat pos[3];
 	GLfloat tex[2];
@@ -100,7 +101,14 @@ void displayKey(unsigned char key, int x, int y){
 		case 'g': case 'G':
 			display_ghostboxes = !display_ghostboxes;
 			break;
+		case '+':
+			display_sphere_scale *= 1.125;
+			break;
+		case '-':
+			display_sphere_scale /= 1.125;
+			break;
 		case 'r': case 'R':
+			display_sphere_scale = 1.;
 			zprReset(0.85/boxsize_max);
 			break;
 		case 't': case 'T':
@@ -115,9 +123,6 @@ void displayKey(unsigned char key, int x, int y){
 			break;
 		case 'w': case 'W':
 			display_wire = !display_wire;
-			break;
-		case 'f': case 'F':
-			display_fancy = !display_fancy;
 			break;
 		case 'c': case 'C':
 			display_clear = !display_clear;
@@ -183,9 +188,6 @@ void display(){
 	if (display_clear){
 	        glClear(GL_DEPTH_BUFFER_BIT | GL_COLOR_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
 	}
-	if (display_fancy && display_init_fancy_done == 0){
-		display_init_fancy();
-	}
 	switch (display_mode){
 		case 0: // points
 			glEnable(GL_BLEND);                    
@@ -206,6 +208,9 @@ void display(){
 			glLightfv(GL_LIGHT0, GL_POSITION, lightpos);
 			break;
 		case 2: // textured spheres
+			if (display_init_fancy_done == 0){
+				display_init_fancy();
+			}
 			glDisable(GL_LIGHTING);
 			glDisable(GL_LIGHT0);
 			glDisable(GL_BLEND);                    
@@ -241,9 +246,9 @@ void display(){
 						struct particle p = particles[i];
 						glTranslatef(p.x,p.y,p.z);
 #ifdef COLLISIONS_NONE
-						double scale = boxsize/100.;
+						double scale = boxsize/100.*display_sphere_scale;
 #else 	// COLLISIONS_NONE
-						double scale = p.r;
+						double scale = p.r*display_sphere_scale;
 #endif 	// COLLISIONS_NONE
 						glScalef(scale,scale,scale);
 						glutSolidSphere(1,40,10);
@@ -252,40 +257,41 @@ void display(){
 					}
 					break;
 				case 2: // textured spheres
-					glColor4f(1.0,1.0,1.0,1.0);
-					glTexParameterf( GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT );
-					glTexParameterf( GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT );
-					glBindBuffer(GL_ARRAY_BUFFER,VertexHandle);
-					glEnableClientState(GL_VERTEX_ARRAY);
-					glVertexPointer(3,GL_FLOAT,		sizeof(vbo), (void*)(0));
-					glEnableClientState(GL_NORMAL_ARRAY);
-					glNormalPointer(GL_FLOAT,		sizeof(vbo), (void*)(0));
-					glBindTexture(GL_TEXTURE_2D,display_texture_star1);
-					glEnableClientState(GL_TEXTURE_COORD_ARRAY);	
-					glTexCoordPointer(2, GL_FLOAT,	sizeof(vbo), (void*)(3*sizeof(float)));
+					if(display_init_fancy_done>0){
+						glColor4f(1.0,1.0,1.0,1.0);
+						glTexParameterf( GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT );
+						glTexParameterf( GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT );
+						glBindBuffer(GL_ARRAY_BUFFER,VertexHandle);
+						glEnableClientState(GL_VERTEX_ARRAY);
+						glVertexPointer(3,GL_FLOAT,		sizeof(vbo), (void*)(0));
+						glEnableClientState(GL_NORMAL_ARRAY);
+						glNormalPointer(GL_FLOAT,		sizeof(vbo), (void*)(0));
+						glEnableClientState(GL_TEXTURE_COORD_ARRAY);	
+						glTexCoordPointer(2, GL_FLOAT,	sizeof(vbo), (void*)(3*sizeof(float)));
 
-					glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, IndicesHandle);
-
-					for (int i=0;i<N;i++){
-						struct particle p = particles[i];
-						glTranslatef(p.x,p.y,p.z);
+						glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, IndicesHandle);
+						for (int i=0;i<N;i++){
+							glBindTexture(GL_TEXTURE_2D,display_texture_id[i]);
+							struct particle p = particles[i];
+							glTranslatef(p.x,p.y,p.z);
 #ifdef COLLISIONS_NONE
-						double scale = boxsize/100.;
+							double scale = boxsize/100.*display_sphere_scale;
 #else 	// COLLISIONS_NONE
-						double scale = p.r;
+							double scale = p.r*display_sphere_scale;
 #endif 	// COLLISIONS_NONE
-						glScalef(scale,scale,scale);
-						glDrawElements(GL_TRIANGLE_STRIP, IndicesCount, GL_UNSIGNED_SHORT, 0);
-						glScalef(1./scale,1./scale,1./scale);
-						glTranslatef(-p.x,-p.y,-p.z);
+							glScalef(scale,scale,scale);
+							glDrawElements(GL_TRIANGLE_STRIP, IndicesCount, GL_UNSIGNED_SHORT, 0);
+							glScalef(1./scale,1./scale,1./scale);
+							glTranslatef(-p.x,-p.y,-p.z);
+						}
+						glDisableClientState(GL_VERTEX_ARRAY);
+						glDisableClientState(GL_NORMAL_ARRAY);
+						glDisableClientState(GL_TEXTURE_COORD_ARRAY);	
+						glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0); 	
+						glBindBuffer(GL_ARRAY_BUFFER,0);
+						glBindTexture(GL_TEXTURE_2D,0);
+						break;
 					}
-					glDisableClientState(GL_VERTEX_ARRAY);
-					glDisableClientState(GL_NORMAL_ARRAY);
-					glDisableClientState(GL_TEXTURE_COORD_ARRAY);	
-					glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0); 	
-					glBindBuffer(GL_ARRAY_BUFFER,0);
-					glBindTexture(GL_TEXTURE_2D,0);
-					break;
 			}
 		}
 		// Drawing wires
@@ -400,8 +406,8 @@ void display_init(int argc, char* argv[]){
 			sphereVBO[counter].pos[0] = -sinf(theta) * sinf(rho);
 			sphereVBO[counter].pos[1] = cosf(theta) * sinf(rho);
 			sphereVBO[counter].pos[2] = cosf(rho);
-			sphereVBO[counter].tex[0] = 1.f-theta/(2.f*M_PI);
-			sphereVBO[counter].tex[1] = 1.f-rho/M_PI;
+			sphereVBO[counter].tex[0] = theta/(2.f*M_PI);
+			sphereVBO[counter].tex[1] = rho/M_PI;
 			
 			if (i<stacks){
 				triangleStripIndices[2*counter]   = (GLushort) counter;
@@ -425,12 +431,6 @@ void display_init(int argc, char* argv[]){
 	free(triangleStripIndices);
 
 
-
-
-
-
-	// Enter glut run loop and never come back.
-	display_init_fancy();
 	glutMainLoop();
 }
 
@@ -446,8 +446,6 @@ GLuint display_load_texture(char* filename, int width, int height){
 	if ( file == NULL ) return 0;
 
 	// allocate buffer
-	width = 256;
-	height = 256;
 	char* data = malloc( width * height * 3 );
 
 	// read texture data
@@ -526,10 +524,32 @@ void display_find_texture_path(){
 void display_init_fancy(){
 	display_find_texture_path();
 	if (!strlen(display_texture_path)){
-		printf("\nCannot find path for textures. Set the environment variable REBOUND.\n");
+		printf("\nCannot find path for textures. Set environment variable REBOUND.\n");
+		display_init_fancy_done = -1; 
 		return;
 	}
-	display_texture_star1 = display_load_texture("star1.raw",256,256);
+	if (display_texture_name==NULL){
+		printf("\nVariable char** display_texture_name not set.\n");
+		display_init_fancy_done = -2; 
+		return;
+	}
+	if (display_texture_id==NULL){
+		display_texture_id = malloc(sizeof(unsigned int)*N);
+	}
+	for (int i=0;i<N;i++){
+		int done = 0;
+		for (int j=0;j<i;j++){
+			if(strcmp(display_texture_name[i],display_texture_name[j])==0){ 
+				display_texture_id[i] = display_texture_id[j];
+				done = 1;
+			}
+		}
+		if (done==0){
+			display_texture_id[i] = display_load_texture(display_texture_name[i],512,512);
+		}
+
+	}
+	display_init_fancy_done = 1; 
 }
 
 #endif // OPENGL
