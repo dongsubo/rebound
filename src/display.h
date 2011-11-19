@@ -40,4 +40,5 @@ void display_init(int argc, char* argv[]);
 extern int display_init_done;	/**< Is set to one when the display is initialized and can be drawn. This prevents errors when output_png() is called, but display not initialized yet. */
 
 extern char** display_texture_name;	/**< Filenames of textures for spheres. */
+extern int display_pause ;		/**< Pauses visualization, but keep simulation running */
 #endif

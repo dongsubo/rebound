@@ -259,8 +259,14 @@ void output_png(char* dirname){
 }
 
 void output_png_single(char* filename){
-	// Read Image
 	if (display_init_done==0) return;
+	// Force redraw
+	if (display_pause){
+		display_pause=0;
+		display();
+		display_pause=1;
+	}
+	// Read Image
 	GLint viewport[4];
 	glGetIntegerv(GL_VIEWPORT, viewport);
 	int width = viewport[2];

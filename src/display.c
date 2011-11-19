@@ -58,6 +58,7 @@ int display_mass 		= 0;	/**< Shows/hides centre of mass in tree structure. */
 int display_wire 		= 0;	/**< Shows/hides orbit wires. */
 int display_clear 		= 1;	/**< Toggles clearing the display on each draw. */
 int display_ghostboxes 		= 0;	/**< Shows/hides ghost boxes. */
+int display_init_done		= 0;
 #define DEG2RAD (M_PI/180.)
 
 double display_sphere_scale 	= 1.;	
@@ -220,7 +221,6 @@ void display(){
 			break;
 	}
 	glTranslatef(0,0,-boxsize_max);
-	glEnable(GL_POINT_SMOOTH);
 	glVertexPointer(3, GL_DOUBLE, sizeof(struct particle), particles);
 	int _N_active = (N_active==-1)?N:N_active;
 	for (int i=-display_ghostboxes*nghostx;i<=display_ghostboxes*nghostx;i++){
@@ -366,11 +366,14 @@ void display_init(int argc, char* argv[]){
 	glutKeyboardFunc(displayKey);
 	glEnable(GL_BLEND);                    
 	glBlendFunc(GL_SRC_ALPHA, GL_ONE);  
+	glEnable(GL_POINT_SMOOTH);
+	glEnable(GL_LINE_SMOOTH);
+	glShadeModel ( GL_SMOOTH );
+	//glHint(GL_POLYGON_SMOOTH_HINT,GL_NICEST);
 	
 	// Setup lights
 
 	glCullFace(GL_BACK);
-	glShadeModel ( GL_SMOOTH );
 	glEnable( GL_NORMALIZE );
 	glEnable(GL_COLOR_MATERIAL);
 	static GLfloat light[] = {0.7f, 0.7f, 0.7f, 1.f};
@@ -433,7 +436,7 @@ void display_init(int argc, char* argv[]){
 	free(sphereVBO);
 	free(triangleStripIndices);
 
-
+	display_init_done = 1;
 	glutMainLoop();
 }
 
