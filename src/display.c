@@ -102,10 +102,10 @@ void displayKey(unsigned char key, int x, int y){
 			display_ghostboxes = !display_ghostboxes;
 			break;
 		case '+':
-			display_sphere_scale *= 1.125;
+			display_sphere_scale *= 1.05;
 			break;
 		case '-':
-			display_sphere_scale /= 1.125;
+			display_sphere_scale /= 1.05;
 			break;
 		case 'r': case 'R':
 			display_sphere_scale = 1.;
@@ -296,6 +296,9 @@ void display(){
 		}
 		// Drawing wires
 		if (display_wire){
+			glDisable(GL_LIGHTING);
+			glDisable(GL_LIGHT0);
+			glDisable(GL_TEXTURE_2D);
 			double radius = 0;
 			for (int i=1;i<N;i++){
 				struct particle p = particles[i];
