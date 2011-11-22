@@ -64,6 +64,7 @@ int display_init_done		= 0;
 double display_sphere_scale 	= 1.;	
 void display_init_fancy();
 unsigned int* display_texture_id = NULL;
+unsigned int display_texture_rays;
 char** display_texture_name	= NULL;
 unsigned int VertexCount, IndicesCount;
 unsigned int VertexHandle, IndicesHandle;
@@ -176,6 +177,15 @@ void display_entire_tree(){
 }
 #endif
 
+void display_plane(){
+	glBegin( GL_QUADS );
+	glTexCoord2d(0.0,0.0); glVertex3d(-1.0,-1.0,0);
+	glTexCoord2d(1.0,0.0); glVertex3d(1.0,-1.0,0);
+	glTexCoord2d(1.0,1.0); glVertex3d(1.0,1.0,0);
+	glTexCoord2d(0.0,1.0); glVertex3d(-1.0,1.0,0);
+	glEnd();
+}
+
 void display(){
 	if (display_pause) return;
 #ifdef TREE
@@ -187,11 +197,13 @@ void display(){
 	}
 #endif
 	if (display_clear){
+		glClearColor(0,0,0,1);
 	        glClear(GL_DEPTH_BUFFER_BIT | GL_COLOR_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
 	}
 	switch (display_mode){
 		case 0: // points
 			glEnable(GL_BLEND);                    
+			glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
 			glDepthMask(GL_FALSE);
 			glDisable(GL_DEPTH_TEST);
 			glDisable(GL_LIGHTING);
@@ -212,12 +224,37 @@ void display(){
 			if (display_init_fancy_done == 0){
 				display_init_fancy();
 			}
+			glEnable(GL_BLEND);                    
+			glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
 			glDisable(GL_LIGHTING);
 			glDisable(GL_LIGHT0);
-			glDisable(GL_BLEND);                    
 			glDepthMask(GL_TRUE);
 			glEnable(GL_DEPTH_TEST);
+			glEnable(GL_CULL_FACE );
+			glCullFace(GL_FRONT);
+			glEnable(GL_NORMALIZE);	
+			glEnable(GL_COLOR_MATERIAL);
 			glEnable(GL_TEXTURE_2D);
+			
+
+
+	glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
+
+			glDisable(GL_LIGHTING);
+			glDisable(GL_COLOR_MATERIAL);
+			glDisable(GL_LIGHT0);
+			glDisable(GL_NORMALIZE);
+			
+			glDisableClientState(GL_NORMAL_ARRAY);
+			glDisable(GL_CULL_FACE );
+			glCullFace(GL_BACK);
+			glEnableClientState(GL_VERTEX_ARRAY);
+			glEnableClientState(GL_TEXTURE_COORD_ARRAY);	
+			
+			
+			glColor4f(1.0, 1.0, 1.0, 1.0);
+			
+			glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
 			break;
 	}
 	glTranslatef(0,0,-boxsize_max);
@@ -271,7 +308,6 @@ void display(){
 
 						glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, IndicesHandle);
 						for (int i=0;i<N;i++){
-							glBindTexture(GL_TEXTURE_2D,display_texture_id[i]);
 							struct particle p = particles[i];
 							glTranslatef(p.x,p.y,p.z);
 #ifdef COLLISIONS_NONE
@@ -280,6 +316,23 @@ void display(){
 							double scale = p.r*display_sphere_scale;
 #endif 	// COLLISIONS_NONE
 							glScalef(scale,scale,scale);
+							if(strcmp(display_texture_name[i],"sun.raw")==0){
+								glBindTexture(GL_TEXTURE_2D,display_texture_rays);
+								glDisableClientState(GL_VERTEX_ARRAY);
+								glDisableClientState(GL_NORMAL_ARRAY);
+								glDisableClientState(GL_TEXTURE_COORD_ARRAY);	
+
+								glScalef(4.,4.,1);
+								display_plane();
+								//display_plane();
+								//display_plane();
+								glScalef(1./4.,1./4.,1);
+								
+								glEnableClientState(GL_TEXTURE_COORD_ARRAY);	
+								glEnableClientState(GL_VERTEX_ARRAY);
+								glEnableClientState(GL_NORMAL_ARRAY);
+							}
+							glBindTexture(GL_TEXTURE_2D,display_texture_id[i]);
 							glDrawElements(GL_TRIANGLE_STRIP, IndicesCount, GL_UNSIGNED_SHORT, 0);
 							glScalef(1./scale,1./scale,1./scale);
 							glTranslatef(-p.x,-p.y,-p.z);
@@ -365,10 +418,11 @@ void display_init(int argc, char* argv[]){
 	glutIdleFunc(iterate);
 	glutKeyboardFunc(displayKey);
 	glEnable(GL_BLEND);                    
-	glBlendFunc(GL_SRC_ALPHA, GL_ONE);  
+	//glBlendFunc(GL_SRC_ALPHA, GL_ONE);  
+	glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
 	glEnable(GL_POINT_SMOOTH);
 	glEnable(GL_LINE_SMOOTH);
-	glShadeModel ( GL_SMOOTH );
+	glShadeModel(GL_SMOOTH);
 	//glHint(GL_POLYGON_SMOOTH_HINT,GL_NICEST);
 	
 	// Setup lights
@@ -442,7 +496,7 @@ void display_init(int argc, char* argv[]){
 
 char* display_texture_path = NULL;
  
-GLuint display_load_texture(char* filename, int width, int height){
+GLuint display_load_texture(char* filename, int width, int height,int rgba){
 	GLuint texture;
 
 	// open texture data
@@ -452,10 +506,12 @@ GLuint display_load_texture(char* filename, int width, int height){
 	if ( file == NULL ) return 0;
 
 	// allocate buffer
-	char* data = malloc( width * height * 3 );
+	int size = 3;
+	if (rgba) size =4;
+	char* data = malloc( width * height * size );
 
 	// read texture data
-	fread( data, width * height * 3, 1, file );
+	fread( data, width * height * size, 1, file );
 	fclose( file );
 
 	// allocate a texture name
@@ -465,14 +521,18 @@ GLuint display_load_texture(char* filename, int width, int height){
 	glBindTexture( GL_TEXTURE_2D, texture );
 
 	// select modulate to mix texture with color for shading
-	glTexEnvf( GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_MODULATE );
+//	glTexEnvf( GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_MODULATE );
 	glTexParameterf( GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_NEAREST );
 	glTexParameterf( GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR );
 	glTexParameterf( GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT );
 	glTexParameterf( GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT );
 
 	// build our texture mipmaps
-	gluBuild2DMipmaps( GL_TEXTURE_2D, 3, width, height, GL_RGB, GL_UNSIGNED_BYTE, data );
+	if (rgba){
+		gluBuild2DMipmaps( GL_TEXTURE_2D, 4, width, height, GL_RGBA, GL_UNSIGNED_BYTE, data );
+	}else{
+		gluBuild2DMipmaps( GL_TEXTURE_2D, 3, width, height, GL_RGB, GL_UNSIGNED_BYTE, data );
+	}
 
 	// free buffer
 	free( data );
@@ -551,10 +611,11 @@ void display_init_fancy(){
 			}
 		}
 		if (done==0){
-			display_texture_id[i] = display_load_texture(display_texture_name[i],512,512);
+			display_texture_id[i] = display_load_texture(display_texture_name[i],512,512,0);
 		}
 
 	}
+	display_texture_rays = display_load_texture("rays.raw",512,512,1);
 	display_init_fancy_done = 1; 
 }
 
