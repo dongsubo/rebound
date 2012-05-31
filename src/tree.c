@@ -225,6 +225,7 @@ void tree_update_gravity_data_in_cell(struct cell *node){
 		node->mx = 0;
 		node->my = 0;
 		node->mz = 0;
+		double m_tot = 0;
 		for (int o=0; o<8; o++) {
 			struct cell* d = node->oct[o];
 			if (d!=NULL){
@@ -235,9 +236,9 @@ void tree_update_gravity_data_in_cell(struct cell *node){
 				node->my += d->my*d_m;
 				node->mz += d->mz*d_m;
 				node->m  += d_m;
+				m_tot++;
 			}
 		}
-		double m_tot = node->m;
 		if (m_tot>0){
 			node->mx /= m_tot;
 			node->my /= m_tot;
@@ -265,7 +266,7 @@ void tree_update_gravity_data_in_cell(struct cell *node){
 	}else{ 
 		// Leaf nodes
 		struct particle p = particles[node->pt];
-		node->m = p.m;
+		node->m = p.q;
 		node->mx = p.x;
 		node->my = p.y;
 		node->mz = p.z;

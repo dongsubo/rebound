@@ -113,9 +113,9 @@ void gravity_calculate_acceleration_for_particle_from_cell(const int pt, const s
 			}
 		} else {
 			double r = sqrt(r2 + softening2);
-			double prefact = -G/(r*r*r)*node->m;
+			double prefact = -G*particles[pt].q/(r*r*r)*node->m;
 #ifdef QUADRUPOLE
-			double qprefact = G/(r*r*r*r*r);
+			double qprefact = G*particles[pt].q/(r*r*r*r*r);
 			particles[pt].ax += qprefact*(dx*node->mxx + dy*node->mxy + dz*node->mxz); 
 			particles[pt].ay += qprefact*(dx*node->mxy + dy*node->myy + dz*node->myz); 
 			particles[pt].az += qprefact*(dx*node->mxz + dy*node->myz + dz*node->mzz); 
@@ -134,7 +134,7 @@ void gravity_calculate_acceleration_for_particle_from_cell(const int pt, const s
 	} else { // It's a leaf node
 		if (node->pt == pt) return;
 		double r = sqrt(r2 + softening2);
-		double prefact = -G/(r*r*r)*node->m;
+		double prefact = -G*particles[pt].q/(r*r*r)*node->m;
 		particles[pt].ax += prefact*dx; 
 		particles[pt].ay += prefact*dy; 
 		particles[pt].az += prefact*dz; 
